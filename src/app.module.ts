@@ -1,9 +1,28 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import databaseConfig from './config/database.config';
+import redisConfig from './config/redis.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { validationSchema } from './config/validation.schema';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
-  imports: [],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [databaseConfig, redisConfig],
+      validationSchema,
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        configService.getOrThrow<TypeOrmModuleOptions>('database'),
+    }),
+    RedisModule.forRoot(),
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

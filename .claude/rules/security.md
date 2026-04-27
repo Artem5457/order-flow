@@ -1,0 +1,34 @@
+## Security
+
+### Security Guidelines
+- Never hardcode sensitive data (API keys, DB credentials, JWT secrets)
+- Use environment variables (`process.env`) and `.env`files outside of version control
+- Validate all incoming data using DTOs + class-validator
+- Sanitize user input to prevent XSS and injection attacks
+- Use HTTPS in all environments (especially production)
+- Enable secure HTTP headers (Helmet middleware)
+- Implement proper authentication (JWT / OAuth) and authorization (roles/guards)
+- Never trust client input — always validate on backend
+- Use parameterized queries or ORM (e.g., TypeORM) to prevent SQL injection
+- Protect against XSS (sanitize output, avoid unsafe HTML rendering)
+- Implement CSRF protection for state-changing requests (cookies/session apps)
+- Configure CORS properly (avoid `*` in production)
+- Implement rate limiting (e.g., @nestjs/throttler)
+- Hash passwords using strong algorithms (bcrypt / argon2)
+- Never store plain-text passwords
+- Use secure cookies (`httpOnly`, `secure`, `sameSite`)
+- Avoid exposing internal errors (use global exception filters)
+- Log security events but never log sensitive data
+- Protect file uploads (validate type, size, storage location)
+- Limit request payload size to prevent abuse
+- Use dependency updates and audit tools regularly (`npm audit`)
+- Isolate services (DB, Redis) from public access (no open ports)
+- Use secrets management in production (Vault, AWS Secrets Manager)
+- Implement proper session/token expiration and refresh logic
+- Protect against brute-force attacks (rate limit login endpoints)
+- Use DTO whitelisting (`whitelist: true`) to strip unknown fields
+- Enable validation pipes globally
+- Avoid exposing stack traces in production
+- Use database access roles with minimal privileges (principle of least privilege)
+- Rotate secrets regularly
+- Monitor and alert suspicious activity

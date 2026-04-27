@@ -13,7 +13,7 @@ import { Product } from './product.entity';
 @Entity('order_item')
 export class OrderItem {
   @PrimaryGeneratedColumn('uuid')
-  readonly id!: string;
+  readonly id: string;
 
   @Column({ type: 'uuid', nullable: false })
   orderId: string;

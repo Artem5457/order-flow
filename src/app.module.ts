@@ -7,12 +7,15 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { validationSchema } from './config/validation.schema';
 import { RedisModule } from './redis/redis.module';
+import { AuthModule } from './auth/auth.module';
+import { ProductModule } from './product/product.module';
+import jwtConfig from './config/jwt.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, redisConfig],
+      load: [databaseConfig, redisConfig, jwtConfig],
       validationSchema,
     }),
     TypeOrmModule.forRootAsync({
@@ -22,6 +25,8 @@ import { RedisModule } from './redis/redis.module';
         configService.getOrThrow<TypeOrmModuleOptions>('database'),
     }),
     RedisModule.forRoot(),
+    AuthModule,
+    ProductModule,
   ],
   controllers: [AppController],
   providers: [AppService],

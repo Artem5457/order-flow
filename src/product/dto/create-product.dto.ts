@@ -8,7 +8,7 @@ export class CreateProductDto {
 
   @IsNotEmpty()
   @Type(() => Number)
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   readonly price: number;
 }

@@ -137,7 +137,7 @@ export class AuthService {
     }
   }
 
-  private getRefreshTokenStorageKey(userId: string): string {
+  private getRefreshTokenStorageKey(this: void, userId: string): string {
     return `${REDIS_KEY_PREFIX}:auth:refresh:${userId}`;
   }
 

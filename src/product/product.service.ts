@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from '../database/entities/product.entity';
 import { Repository } from 'typeorm';
@@ -75,10 +71,6 @@ export class ProductService {
   }
 
   async removeMany(ids: string[]): Promise<void> {
-    if (!ids || ids.length === 0) {
-      throw new BadRequestException('Product IDs array cannot be empty');
-    }
-
     const result = await this.productRepository.delete(ids);
 
     if (result.affected === 0) {

@@ -48,7 +48,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.authService.logout(request.user.id);
-    res.clearCookie('refreshToken');
+    res.clearCookie('refreshToken', {
+      path: '/auth/refresh-token',
+    });
   }
 
   @Post('refresh-token')

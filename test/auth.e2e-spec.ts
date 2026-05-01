@@ -4,6 +4,13 @@ import {
   INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import {
+  ThrottlerGuard,
+  ThrottlerModule,
+  ThrottlerStorage,
+  ThrottlerStorageService,
+} from '@nestjs/throttler';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import cookieParser from 'cookie-parser';
@@ -18,8 +25,14 @@ type MockAuthService = {
   refreshToken: jest.Mock;
 };
 
+const tokensResponse = {
+  accessToken: 'access-token',
+  refreshToken: 'refresh-token',
+};
+
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
+  let moduleFixture: TestingModule;
   let authService: MockAuthService;
   let jwtGuardCanActivateSpy: jest.SpyInstance;
 
@@ -46,9 +59,22 @@ describe('Auth (e2e)', () => {
         return false;
       });
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
+    moduleFixture = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot({
+          throttlers: [
+            {
+              ttl: 60000,
+              limit: 10,
+            },
+          ],
+        }),
+      ],
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: authServiceMock }],
+      providers: [
+        { provide: AuthService, useValue: authServiceMock },
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -65,8 +91,22 @@ describe('Auth (e2e)', () => {
     authService = moduleFixture.get(AuthService);
   });
 
+  beforeEach(() => {
+    const storageSvc =
+      moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    storageSvc.onApplicationShutdown();
+    storageSvc.storage.clear();
+
+    authService.register.mockResolvedValue(tokensResponse);
+    authService.login.mockResolvedValue(tokensResponse);
+    authService.refreshToken.mockResolvedValue(tokensResponse);
+  });
+
   afterEach(() => {
-    jest.clearAllMocks();
+    authService.register.mockClear();
+    authService.login.mockClear();
+    authService.logout.mockClear();
+    authService.refreshToken.mockClear();
   });
 
   afterAll(async () => {
@@ -76,11 +116,6 @@ describe('Auth (e2e)', () => {
 
   describe('Auth endpoints', () => {
     it('POST /auth/register returns tokens and sets refresh cookie', async () => {
-      authService.register.mockResolvedValue({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-      });
-
       const response = await request(app.getHttpServer())
         .post('/auth/register')
         .send({ email: 'TEST@EXAMPLE.COM', password: 'Password123!' })
@@ -90,10 +125,7 @@ describe('Auth (e2e)', () => {
         email: 'test@example.com',
         password: 'Password123!',
       });
-      expect(response.body).toEqual({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-      });
+      expect(response.body).toEqual(tokensResponse);
       expect(response.headers['set-cookie']).toEqual(
         expect.arrayContaining([
           expect.stringContaining('refreshToken=refresh-token'),
@@ -113,6 +145,74 @@ describe('Auth (e2e)', () => {
     it('POST /auth/logout returns 403 without bearer token', async () => {
       await request(app.getHttpServer()).post('/auth/logout').expect(403);
       expect(authService.logout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Rate limiting', () => {
+    it('returns 429 after exceeding limit on POST /auth/register (5/min)', async () => {
+      for (let i = 0; i < 5; i++) {
+        await request(app.getHttpServer())
+          .post('/auth/register')
+          .send({ email: `rl-reg-${i}@example.com`, password: 'Password123!' })
+          .expect(201);
+      }
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'rl-reg-429@example.com', password: 'Password123!' })
+        .expect(429);
+
+      expect(res.headers['retry-after']).toBeDefined();
+      expect(res.body).toMatchObject({
+        statusCode: 429,
+        message: 'ThrottlerException: Too Many Requests',
+      });
+    });
+
+    it('returns 429 after exceeding limit on POST /auth/login (5/min)', async () => {
+      for (let i = 0; i < 5; i++) {
+        await request(app.getHttpServer())
+          .post('/auth/login')
+          .send({
+            email: `rl-login-${i}@example.com`,
+            password: 'Password123!',
+          })
+          .expect(200);
+      }
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'rl-login-429@example.com',
+          password: 'Password123!',
+        })
+        .expect(429);
+
+      expect(res.headers['retry-after']).toBeDefined();
+      expect(res.body).toMatchObject({
+        statusCode: 429,
+        message: 'ThrottlerException: Too Many Requests',
+      });
+    });
+
+    it('returns 429 after exceeding limit on POST /auth/refresh-token (10/min)', async () => {
+      for (let i = 0; i < 10; i++) {
+        await request(app.getHttpServer())
+          .post('/auth/refresh-token')
+          .send({ refreshToken: `mock-refresh-${i}` })
+          .expect(200);
+      }
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh-token')
+        .send({ refreshToken: 'mock-refresh-429' })
+        .expect(429);
+
+      expect(res.headers['retry-after']).toBeDefined();
+      expect(res.body).toMatchObject({
+        statusCode: 429,
+        message: 'ThrottlerException: Too Many Requests',
+      });
     });
   });
 });

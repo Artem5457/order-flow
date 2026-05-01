@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import databaseConfig from './config/database.config';
 import redisConfig from './config/redis.config';
 import { AppController } from './app.controller';
@@ -24,11 +26,25 @@ import jwtConfig from './config/jwt.config';
       useFactory: (configService: ConfigService) =>
         configService.getOrThrow<TypeOrmModuleOptions>('database'),
     }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000,
+          limit: 120,
+        },
+      ],
+    }),
     RedisModule.forRoot(),
     AuthModule,
     ProductModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

@@ -4,6 +4,13 @@ import {
   INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
+import {
+  ThrottlerGuard,
+  ThrottlerModule,
+  ThrottlerStorage,
+} from '@nestjs/throttler';
+import { ThrottlerStorageService } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import cookieParser from 'cookie-parser';
@@ -22,6 +29,7 @@ type MockProductService = {
 
 describe('Product (e2e)', () => {
   let app: INestApplication<App>;
+  let moduleFixture: TestingModule;
   let productService: MockProductService;
   let jwtGuardCanActivateSpy: jest.SpyInstance;
 
@@ -50,9 +58,22 @@ describe('Product (e2e)', () => {
         return false;
       });
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
+    moduleFixture = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot({
+          throttlers: [
+            {
+              ttl: 60000,
+              limit: 120,
+            },
+          ],
+        }),
+      ],
       controllers: [ProductController],
-      providers: [{ provide: ProductService, useValue: productServiceMock }],
+      providers: [
+        { provide: ProductService, useValue: productServiceMock },
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -67,6 +88,13 @@ describe('Product (e2e)', () => {
     await app.init();
 
     productService = moduleFixture.get(ProductService);
+  });
+
+  beforeEach(() => {
+    const storageSvc =
+      moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    storageSvc.onApplicationShutdown();
+    storageSvc.storage.clear();
   });
 
   afterEach(() => {
@@ -126,6 +154,50 @@ describe('Product (e2e)', () => {
         .expect(400);
 
       expect(productService.removeMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Rate limiting', () => {
+    it('returns 429 after exceeding limit on GET /products (10/min)', async () => {
+      for (let i = 0; i < 120; i++) {
+        await request(app.getHttpServer())
+          .get('/products')
+          .set('Authorization', 'Bearer valid-token')
+          .expect(200);
+      }
+
+      const res = await request(app.getHttpServer())
+        .get('/products')
+        .set('Authorization', 'Bearer valid-token')
+        .expect(429);
+
+      expect(res.headers['retry-after']).toBeDefined();
+      expect(res.body).toMatchObject({
+        statusCode: 429,
+        message: 'ThrottlerException: Too Many Requests',
+      });
+    });
+
+    it('returns 429 after exceeding limit on POST /products (10/min)', async () => {
+      for (let i = 0; i < 120; i++) {
+        await request(app.getHttpServer())
+          .post('/products')
+          .set('Authorization', 'Bearer valid-token')
+          .send({ name: `Product ${i}`, price: 99.99 })
+          .expect(201);
+      }
+
+      const res = await request(app.getHttpServer())
+        .post('/products')
+        .set('Authorization', 'Bearer valid-token')
+        .send({ name: 'Product 429', price: 99.99 })
+        .expect(429);
+
+      expect(res.headers['retry-after']).toBeDefined();
+      expect(res.body).toMatchObject({
+        statusCode: 429,
+        message: 'ThrottlerException: Too Many Requests',
+      });
     });
   });
 });

@@ -12,11 +12,13 @@ import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, AuthResponseDto, RefreshTokenDto } from './dto';
 import { Auth } from './decorators/auth.decorator';
 import { AuthenticatedUser } from './strategies/jwt.strategy';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(
@@ -29,7 +31,9 @@ export class AuthController {
     return tokens;
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -53,7 +57,9 @@ export class AuthController {
     });
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('refresh-token')
+  @HttpCode(HttpStatus.OK)
   async refreshToken(
     @Body() dto: RefreshTokenDto,
     @Res({ passthrough: true }) res: Response,

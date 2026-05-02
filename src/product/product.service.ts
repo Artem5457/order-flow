@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
+import { PaginatedProductsQueryDto } from './dto/paginated-products-query.dto';
+import { PaginatedProductsResponse } from './interfaces';
 
 @Injectable()
 export class ProductService {
@@ -34,10 +36,26 @@ export class ProductService {
     return this.toDto(product);
   }
 
-  async findAll(): Promise<ProductResponseDto[]> {
-    const products = await this.productRepository.find();
+  async findAll(
+    query: PaginatedProductsQueryDto,
+  ): Promise<PaginatedProductsResponse> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
 
-    return products.map((product) => this.toDto(product));
+    const [products, total] = await this.productRepository.findAndCount({
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      items: products.map((product) => this.toDto(product)),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 0,
+    };
   }
 
   async update(id: string, dto: UpdateProductDto): Promise<ProductResponseDto> {

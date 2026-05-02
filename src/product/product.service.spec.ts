@@ -9,6 +9,7 @@ import { NotFoundException } from '@nestjs/common';
 
 type MockProductRepository = {
   find: jest.Mock;
+  findAndCount: jest.Mock;
   findOne: jest.Mock;
   create: jest.Mock;
   save: jest.Mock;
@@ -30,6 +31,7 @@ describe('ProductService', () => {
   beforeEach(async () => {
     const mockProductRepository = {
       find: jest.fn(),
+      findAndCount: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
@@ -117,21 +119,54 @@ describe('ProductService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all products', async () => {
-      productRepository.find.mockResolvedValue([mockProduct]);
+    it('should use default page 1 and limit 10', async () => {
+      productRepository.findAndCount.mockResolvedValue([[mockProduct], 25]);
 
-      const result = await productService.findAll();
+      const result = await productService.findAll({});
 
-      expect(productRepository.find).toHaveBeenCalled();
-      expect(result).toEqual([
-        {
-          id: mockProduct.id,
-          name: mockProduct.name,
-          price: 99.99,
-          createdAt: mockProduct.createdAt,
-          updatedAt: undefined,
-        },
-      ]);
+      expect(productRepository.findAndCount).toHaveBeenCalledWith({
+        skip: 0,
+        take: 10,
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toMatchObject({
+        total: 25,
+        page: 1,
+        limit: 10,
+        totalPages: 3,
+      });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toEqual({
+        id: mockProduct.id,
+        name: mockProduct.name,
+        price: 99.99,
+        createdAt: mockProduct.createdAt,
+        updatedAt: undefined,
+      });
+    });
+
+    it('should apply skip/take for page 2', async () => {
+      productRepository.findAndCount.mockResolvedValue([[mockProduct], 15]);
+
+      const result = await productService.findAll({ page: 2, limit: 5 });
+
+      expect(productRepository.findAndCount).toHaveBeenCalledWith({
+        skip: 5,
+        take: 5,
+        order: { createdAt: 'DESC' },
+      });
+      expect(result.page).toBe(2);
+      expect(result.limit).toBe(5);
+      expect(result.totalPages).toBe(3);
+    });
+
+    it('should return zero totalPages when empty', async () => {
+      productRepository.findAndCount.mockResolvedValue([[], 0]);
+
+      const result = await productService.findAll({});
+
+      expect(result.totalPages).toBe(0);
+      expect(result.items).toEqual([]);
     });
   });
 

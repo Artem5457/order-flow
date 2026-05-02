@@ -83,28 +83,50 @@ describe('ProductController', () => {
   });
 
   describe('getAll', () => {
-    const mockProducts = [
-      {
-        id: 'product-1',
-        name: 'Product 1',
-        price: 10.99,
-        createdAt: new Date(),
-      },
-      {
-        id: 'product-2',
-        name: 'Product 2',
-        price: 20.99,
-        createdAt: new Date(),
-      },
-    ];
+    const mockPaginated = {
+      items: [
+        {
+          id: 'product-1',
+          name: 'Product 1',
+          price: 10.99,
+          createdAt: new Date(),
+        },
+        {
+          id: 'product-2',
+          name: 'Product 2',
+          price: 20.99,
+          createdAt: new Date(),
+        },
+      ],
+      total: 2,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    };
 
-    it('should call productService.findAll and return all products', async () => {
-      productService.findAll.mockResolvedValue(mockProducts);
+    it('should forward query defaults and return paginated products', async () => {
+      productService.findAll.mockResolvedValue(mockPaginated);
 
-      const result = await productController.getAll();
+      const result = await productController.getAll({});
 
-      expect(productService.findAll).toHaveBeenCalled();
-      expect(result).toEqual(mockProducts);
+      expect(productService.findAll).toHaveBeenCalledWith({});
+      expect(result).toEqual(mockPaginated);
+    });
+
+    it('should forward explicit page and limit', async () => {
+      productService.findAll.mockResolvedValue({
+        ...mockPaginated,
+        page: 3,
+        limit: 25,
+        totalPages: 4,
+      });
+
+      await productController.getAll({ page: 3, limit: 25 });
+
+      expect(productService.findAll).toHaveBeenCalledWith({
+        page: 3,
+        limit: 25,
+      });
     });
   });
 

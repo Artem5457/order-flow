@@ -155,10 +155,107 @@ describe('Product (e2e)', () => {
 
       expect(productService.removeMany).not.toHaveBeenCalled();
     });
+
+    describe('GET /products pagination', () => {
+      it('returns paginated body and forwards page and limit to service', async () => {
+        const createdAt = new Date('2026-04-28T12:00:00.000Z');
+        productService.findAll.mockResolvedValue({
+          items: [
+            {
+              id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+              name: 'Coffee',
+              price: 199.99,
+              createdAt,
+              updatedAt: undefined,
+            },
+          ],
+          total: 11,
+          page: 2,
+          limit: 5,
+          totalPages: 3,
+        });
+
+        const res = await request(app.getHttpServer())
+          .get('/products?page=2&limit=5')
+          .set('Authorization', 'Bearer valid-token')
+          .expect(200);
+
+        expect(productService.findAll).toHaveBeenCalledWith({
+          page: 2,
+          limit: 5,
+        });
+        expect(res.body).toEqual({
+          items: [
+            {
+              id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+              name: 'Coffee',
+              price: 199.99,
+              createdAt: createdAt.toISOString(),
+            },
+          ],
+          total: 11,
+          page: 2,
+          limit: 5,
+          totalPages: 3,
+        });
+      });
+
+      it('calls service with empty query for defaults', async () => {
+        productService.findAll.mockResolvedValue({
+          items: [],
+          total: 0,
+          page: 1,
+          limit: 10,
+          totalPages: 0,
+        });
+
+        await request(app.getHttpServer())
+          .get('/products')
+          .set('Authorization', 'Bearer valid-token')
+          .expect(200);
+
+        expect(productService.findAll).toHaveBeenCalledWith({});
+      });
+
+      it('returns 400 when page is below 1', async () => {
+        await request(app.getHttpServer())
+          .get('/products?page=0&limit=10')
+          .set('Authorization', 'Bearer valid-token')
+          .expect(400);
+
+        expect(productService.findAll).not.toHaveBeenCalled();
+      });
+
+      it('returns 400 when limit exceeds max', async () => {
+        await request(app.getHttpServer())
+          .get('/products?page=1&limit=101')
+          .set('Authorization', 'Bearer valid-token')
+          .expect(400);
+
+        expect(productService.findAll).not.toHaveBeenCalled();
+      });
+
+      it('returns 400 for non-numeric page', async () => {
+        await request(app.getHttpServer())
+          .get('/products?page=abc')
+          .set('Authorization', 'Bearer valid-token')
+          .expect(400);
+
+        expect(productService.findAll).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('Rate limiting', () => {
     it('returns 429 after exceeding limit on GET /products (10/min)', async () => {
+      productService.findAll.mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0,
+      });
+
       for (let i = 0; i < 120; i++) {
         await request(app.getHttpServer())
           .get('/products')

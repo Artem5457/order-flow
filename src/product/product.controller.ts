@@ -9,15 +9,18 @@ import {
   Patch,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   CreateProductDto,
+  PaginatedProductsQueryDto,
   ProductResponseDto,
   RemoveProductsDto,
   UpdateProductDto,
 } from './dto';
 import { ProductService } from './product.service';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { PaginatedProductsResponse } from './interfaces';
 
 @Controller('products')
 export class ProductController {
@@ -30,18 +33,20 @@ export class ProductController {
     return this.productService.create(dto);
   }
 
+  @Get()
+  @Auth()
+  async getAll(
+    @Query() query: PaginatedProductsQueryDto,
+  ): Promise<PaginatedProductsResponse> {
+    return this.productService.findAll(query);
+  }
+
   @Get(':id')
   @Auth()
   async getById(
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ProductResponseDto> {
     return this.productService.findOne(id);
-  }
-
-  @Get()
-  @Auth()
-  async getAll(): Promise<ProductResponseDto[]> {
-    return this.productService.findAll();
   }
 
   @Patch(':id')

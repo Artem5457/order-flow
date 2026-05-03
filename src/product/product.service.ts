@@ -1,12 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from '../database/entities/product.entity';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
 import { PaginatedProductsQueryDto } from './dto/paginated-products-query.dto';
 import { PaginatedProductsResponse } from './interfaces';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @Injectable()
 export class ProductService {
@@ -15,10 +20,14 @@ export class ProductService {
     private readonly productRepository: Repository<Product>,
   ) {}
 
-  async create(dto: CreateProductDto): Promise<ProductResponseDto> {
+  async create(
+    dto: CreateProductDto,
+    user: AuthenticatedUser,
+  ): Promise<ProductResponseDto> {
     const product = this.productRepository.create({
       name: dto.name,
       price: dto.price.toString(),
+      createdBy: user.id,
     });
 
     const savedProduct = await this.productRepository.save(product);
@@ -58,11 +67,22 @@ export class ProductService {
     };
   }
 
-  async update(id: string, dto: UpdateProductDto): Promise<ProductResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateProductDto,
+    user: AuthenticatedUser,
+  ): Promise<ProductResponseDto> {
     const product = await this.productRepository.findOne({ where: { id } });
 
     if (!product) {
       throw new NotFoundException(`Product with id "${id}" not found`);
+    }
+
+    // Check if user is the owner
+    if (product.createdBy !== user.id) {
+      throw new ForbiddenException(
+        'You are not allowed to modify this product',
+      );
     }
 
     if (dto.name) {
@@ -78,18 +98,39 @@ export class ProductService {
     return this.toDto(updatedProduct);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, user: AuthenticatedUser): Promise<void> {
     const product = await this.productRepository.findOne({ where: { id } });
 
     if (!product) {
       throw new NotFoundException(`Product with id "${id}" not found`);
     }
 
+    // Check if user is the owner
+    if (product.createdBy !== user.id) {
+      throw new ForbiddenException(
+        'You are not allowed to delete this product',
+      );
+    }
+
     await this.productRepository.remove(product);
   }
 
-  async removeMany(ids: string[]): Promise<void> {
-    const result = await this.productRepository.delete(ids);
+  async removeMany(ids: string[], user: AuthenticatedUser): Promise<void> {
+    // First check which products belong to the current user
+    const products = await this.productRepository.find({
+      where: {
+        createdBy: user.id,
+        id: In(ids),
+      },
+    });
+
+    const userProductIds = products.map((product) => product.id);
+
+    if (userProductIds.length === 0) {
+      throw new NotFoundException('No products found that belong to you');
+    }
+
+    const result = await this.productRepository.delete(userProductIds);
 
     if (result.affected === 0) {
       throw new NotFoundException('No products were deleted');

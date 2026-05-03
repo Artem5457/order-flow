@@ -17,6 +17,9 @@ export class Product {
   @Column({ type: 'numeric', precision: 10, scale: 2, nullable: false })
   price: string;
 
+  @Column({ type: 'uuid', nullable: false })
+  createdBy: string;
+
   @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   readonly createdAt: Date;
 

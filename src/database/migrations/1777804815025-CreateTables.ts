@@ -7,8 +7,8 @@ import {
 } from 'typeorm';
 import { OrderStatus } from '../enums';
 
-export class CreateTables2026042700000 implements MigrationInterface {
-  name = 'CreateTables2026042700000';
+export class CreateTables1777804815025 implements MigrationInterface {
+  name = 'CreateTables1777804815025';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Use OrderStatus enum for status values

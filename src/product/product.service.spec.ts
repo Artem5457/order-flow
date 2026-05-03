@@ -5,7 +5,8 @@ import { DeleteResult } from 'typeorm';
 import { Product } from '../database/entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 type MockProductRepository = {
   find: jest.Mock;
@@ -25,6 +26,7 @@ describe('ProductService', () => {
     id: 'product-123',
     name: 'Test Product',
     price: '99.99',
+    createdBy: 'user-123',
     createdAt: new Date(),
   };
 
@@ -63,18 +65,24 @@ describe('ProductService', () => {
       id: 'product-123',
       name: 'New Product',
       price: '199.99',
+      createdBy: 'user-123',
       createdAt: new Date(),
     };
 
     it('should create a new product', async () => {
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
       productRepository.create.mockReturnValue(createdProduct);
       productRepository.save.mockResolvedValue(createdProduct);
 
-      const result = await productService.create(createDto);
+      const result = await productService.create(createDto, user);
 
       expect(productRepository.create).toHaveBeenCalledWith({
         name: createDto.name,
         price: '199.99',
+        createdBy: user.id,
       });
       expect(productRepository.save).toHaveBeenCalledWith(createdProduct);
 
@@ -181,12 +189,20 @@ describe('ProductService', () => {
       productRepository.findOne.mockResolvedValue(mockProduct);
       productRepository.save.mockResolvedValue(updatedProduct);
 
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
       const updateDto: UpdateProductDto = {
         name: 'Updated Product',
         price: 149.99,
       };
 
-      const result = await productService.update('product-123', updateDto);
+      const result = await productService.update(
+        'product-123',
+        updateDto,
+        user,
+      );
 
       expect(productRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'product-123' },
@@ -210,11 +226,34 @@ describe('ProductService', () => {
       productRepository.findOne.mockResolvedValue(null);
 
       await expect(
-        productService.update('non-existent-id', {}),
+        productService.update(
+          'non-existent-id',
+          {},
+          { id: 'user-123', email: 'test@example.com' },
+        ),
       ).rejects.toThrow(NotFoundException);
       await expect(
-        productService.update('non-existent-id', {}),
+        productService.update(
+          'non-existent-id',
+          {},
+          { id: 'user-123', email: 'test@example.com' },
+        ),
       ).rejects.toThrow('Product with id "non-existent-id" not found');
+    });
+
+    it('should throw ForbiddenException if user is not the owner', async () => {
+      const user: AuthenticatedUser = {
+        id: 'different-user',
+        email: 'other@example.com',
+      };
+      productRepository.findOne.mockResolvedValue(mockProduct);
+
+      await expect(
+        productService.update('product-123', { name: 'Updated Product' }, user),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        productService.update('product-123', { name: 'Updated Product' }, user),
+      ).rejects.toThrow('You are not allowed to modify this product');
     });
   });
 
@@ -223,7 +262,11 @@ describe('ProductService', () => {
       productRepository.findOne.mockResolvedValue(mockProduct);
       productRepository.remove.mockResolvedValue(mockProduct);
 
-      await productService.remove('product-123');
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      await productService.remove('product-123', user);
 
       expect(productRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'product-123' },
@@ -234,11 +277,32 @@ describe('ProductService', () => {
     it('should throw NotFoundException if product not found', async () => {
       productRepository.findOne.mockResolvedValue(null);
 
-      await expect(productService.remove('non-existent-id')).rejects.toThrow(
-        NotFoundException,
+      await expect(
+        productService.remove('non-existent-id', {
+          id: 'user-123',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        productService.remove('non-existent-id', {
+          id: 'user-123',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow('Product with id "non-existent-id" not found');
+    });
+
+    it('should throw ForbiddenException if user is not the owner', async () => {
+      const user: AuthenticatedUser = {
+        id: 'different-user',
+        email: 'other@example.com',
+      };
+      productRepository.findOne.mockResolvedValue(mockProduct);
+
+      await expect(productService.remove('product-123', user)).rejects.toThrow(
+        ForbiddenException,
       );
-      await expect(productService.remove('non-existent-id')).rejects.toThrow(
-        'Product with id "non-existent-id" not found',
+      await expect(productService.remove('product-123', user)).rejects.toThrow(
+        'You are not allowed to delete this product',
       );
     });
   });
@@ -249,14 +313,32 @@ describe('ProductService', () => {
         raw: [],
         affected: 2,
       };
+      productRepository.find.mockResolvedValue([mockProduct]);
       productRepository.delete.mockResolvedValue(mockDeleteResult);
 
-      await productService.removeMany(['product-1', 'product-2']);
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      await productService.removeMany(['product-123'], user);
 
-      expect(productRepository.delete).toHaveBeenCalledWith([
-        'product-1',
-        'product-2',
-      ]);
+      expect(productRepository.find).toHaveBeenCalled();
+      expect(productRepository.delete).toHaveBeenCalledWith(['product-123']);
+    });
+
+    it('should throw NotFoundException if no products were found for user', async () => {
+      productRepository.find.mockResolvedValue([]);
+
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      await expect(
+        productService.removeMany(['product-1'], user),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        productService.removeMany(['product-1'], user),
+      ).rejects.toThrow('No products found that belong to you');
     });
 
     it('should throw NotFoundException if no products were deleted', async () => {
@@ -264,14 +346,19 @@ describe('ProductService', () => {
         raw: [],
         affected: 0,
       };
+      productRepository.find.mockResolvedValue([mockProduct]);
       productRepository.delete.mockResolvedValue(mockDeleteResult);
 
-      await expect(productService.removeMany(['product-1'])).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(productService.removeMany(['product-1'])).rejects.toThrow(
-        'No products were deleted',
-      );
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      await expect(
+        productService.removeMany(['product-1'], user),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        productService.removeMany(['product-1'], user),
+      ).rejects.toThrow('No products were deleted');
     });
   });
 });

@@ -20,6 +20,8 @@ import {
 } from './dto';
 import { ProductService } from './product.service';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { PaginatedProductsResponse } from './interfaces';
 
 @Controller('products')
@@ -29,8 +31,11 @@ export class ProductController {
   @Post()
   @Auth()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateProductDto): Promise<ProductResponseDto> {
-    return this.productService.create(dto);
+  async create(
+    @Body() dto: CreateProductDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ProductResponseDto> {
+    return this.productService.create(dto, user);
   }
 
   @Get()
@@ -54,21 +59,28 @@ export class ProductController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateProductDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<ProductResponseDto> {
-    return this.productService.update(id, dto);
+    return this.productService.update(id, dto, user);
   }
 
   @Delete(':id')
   @Auth()
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
-    await this.productService.remove(id);
+  async remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.productService.remove(id, user);
   }
 
   @Delete()
   @Auth()
   @HttpCode(HttpStatus.NO_CONTENT)
-  async removeMany(@Body() dto: RemoveProductsDto): Promise<void> {
-    await this.productService.removeMany(dto.ids);
+  async removeMany(
+    @Body() dto: RemoveProductsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.productService.removeMany(dto.ids, user);
   }
 }

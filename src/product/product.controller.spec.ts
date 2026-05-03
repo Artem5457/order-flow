@@ -5,6 +5,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { RemoveProductsDto } from './dto/remove-products.dto';
 import { DeleteResult } from 'typeorm';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 type MockProductService = {
   create: jest.Mock;
@@ -57,9 +58,13 @@ describe('ProductController', () => {
     it('should call productService.create and return the product', async () => {
       productService.create.mockResolvedValue(mockProduct);
 
-      const result = await productController.create(createDto);
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      const result = await productController.create(createDto, user);
 
-      expect(productService.create).toHaveBeenCalledWith(createDto);
+      expect(productService.create).toHaveBeenCalledWith(createDto, user);
       expect(result).toEqual(mockProduct);
     });
   });
@@ -146,11 +151,20 @@ describe('ProductController', () => {
     it('should call productService.update and return the updated product', async () => {
       productService.update.mockResolvedValue(mockProduct);
 
-      const result = await productController.update('product-123', updateDto);
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      const result = await productController.update(
+        'product-123',
+        updateDto,
+        user,
+      );
 
       expect(productService.update).toHaveBeenCalledWith(
         'product-123',
         updateDto,
+        user,
       );
       expect(result).toEqual(mockProduct);
     });
@@ -160,9 +174,13 @@ describe('ProductController', () => {
     it('should call productService.remove', async () => {
       productService.remove.mockResolvedValue(undefined);
 
-      await productController.remove('product-123');
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      await productController.remove('product-123', user);
 
-      expect(productService.remove).toHaveBeenCalledWith('product-123');
+      expect(productService.remove).toHaveBeenCalledWith('product-123', user);
     });
   });
 
@@ -179,12 +197,16 @@ describe('ProductController', () => {
     it('should call productService.removeMany', async () => {
       productService.removeMany.mockResolvedValue(mockDeleteResult);
 
-      await productController.removeMany(removeDto);
+      const user: AuthenticatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+      };
+      await productController.removeMany(removeDto, user);
 
-      expect(productService.removeMany).toHaveBeenCalledWith([
-        'product-1',
-        'product-2',
-      ]);
+      expect(productService.removeMany).toHaveBeenCalledWith(
+        ['product-1', 'product-2'],
+        user,
+      );
     });
   });
 });

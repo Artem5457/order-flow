@@ -27,6 +27,15 @@ type MockProductService = {
   removeMany: jest.Mock;
 };
 
+const authenticatedUser = { id: 'user-123', email: 'test@example.com' };
+
+const otherAuthenticatedUser = {
+  id: 'user-456',
+  email: 'other@example.com',
+};
+
+const sampleProductId = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+
 describe('Product (e2e)', () => {
   let app: INestApplication<App>;
   let moduleFixture: TestingModule;
@@ -52,7 +61,11 @@ describe('Product (e2e)', () => {
         }>();
         const authHeader = req.headers.authorization;
         if (authHeader === 'Bearer valid-token') {
-          req.user = { id: 'user-123', email: 'test@example.com' };
+          req.user = authenticatedUser;
+          return true;
+        }
+        if (authHeader === 'Bearer other-token') {
+          req.user = otherAuthenticatedUser;
           return true;
         }
         return false;
@@ -114,7 +127,7 @@ describe('Product (e2e)', () => {
 
     it('POST /products creates product for authenticated user', async () => {
       productService.create.mockResolvedValue({
-        id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+        id: sampleProductId,
         name: 'Coffee',
         price: 199.99,
         createdAt: new Date('2026-04-28T12:00:00.000Z'),
@@ -126,15 +139,93 @@ describe('Product (e2e)', () => {
         .send({ name: 'Coffee', price: 199.99 })
         .expect(201);
 
-      expect(productService.create).toHaveBeenCalledWith({
-        name: 'Coffee',
-        price: 199.99,
-      });
+      expect(productService.create).toHaveBeenCalledWith(
+        { name: 'Coffee', price: 199.99 },
+        authenticatedUser,
+      );
       expect(response.body).toMatchObject({
-        id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+        id: sampleProductId,
         name: 'Coffee',
         price: 199.99,
       });
+    });
+
+    it('POST /products passes the JWT user from the request to create', async () => {
+      productService.create.mockResolvedValue({
+        id: sampleProductId,
+        name: 'Tea',
+        price: 5,
+        createdAt: new Date('2026-04-28T12:00:00.000Z'),
+      });
+
+      await request(app.getHttpServer())
+        .post('/products')
+        .set('Authorization', 'Bearer other-token')
+        .send({ name: 'Tea', price: 5 })
+        .expect(201);
+
+      expect(productService.create).toHaveBeenCalledWith(
+        { name: 'Tea', price: 5 },
+        otherAuthenticatedUser,
+      );
+    });
+
+    it('PATCH /products/:id forwards dto and current user to service', async () => {
+      const updatedAt = new Date('2026-04-29T10:00:00.000Z');
+      productService.update.mockResolvedValue({
+        id: sampleProductId,
+        name: 'Espresso',
+        price: 249.99,
+        createdAt: new Date('2026-04-28T12:00:00.000Z'),
+        updatedAt,
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/products/${sampleProductId}`)
+        .set('Authorization', 'Bearer valid-token')
+        .send({ name: 'Espresso', price: 249.99 })
+        .expect(200);
+
+      expect(productService.update).toHaveBeenCalledWith(
+        sampleProductId,
+        { name: 'Espresso', price: 249.99 },
+        authenticatedUser,
+      );
+      expect(res.body).toMatchObject({
+        id: sampleProductId,
+        name: 'Espresso',
+        price: 249.99,
+      });
+    });
+
+    it('DELETE /products/:id forwards id and current user to service', async () => {
+      productService.remove.mockResolvedValue(undefined);
+
+      await request(app.getHttpServer())
+        .delete(`/products/${sampleProductId}`)
+        .set('Authorization', 'Bearer valid-token')
+        .expect(204);
+
+      expect(productService.remove).toHaveBeenCalledWith(
+        sampleProductId,
+        authenticatedUser,
+      );
+    });
+
+    it('DELETE /products forwards ids and current user to removeMany', async () => {
+      const secondId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+      productService.removeMany.mockResolvedValue(undefined);
+
+      await request(app.getHttpServer())
+        .delete('/products')
+        .set('Authorization', 'Bearer valid-token')
+        .send({ ids: [sampleProductId, secondId] })
+        .expect(204);
+
+      expect(productService.removeMany).toHaveBeenCalledWith(
+        [sampleProductId, secondId],
+        authenticatedUser,
+      );
     });
 
     it('GET /products/:id returns 400 for non-uuid id', async () => {
@@ -276,6 +367,13 @@ describe('Product (e2e)', () => {
     });
 
     it('returns 429 after exceeding limit on POST /products (10/min)', async () => {
+      productService.create.mockResolvedValue({
+        id: sampleProductId,
+        name: 'Product',
+        price: 99.99,
+        createdAt: new Date('2026-04-28T12:00:00.000Z'),
+      });
+
       for (let i = 0; i < 120; i++) {
         await request(app.getHttpServer())
           .post('/products')

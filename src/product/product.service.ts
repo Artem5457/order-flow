@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from '../database/entities/product.entity';
@@ -15,6 +16,8 @@ import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 
 @Injectable()
 export class ProductService {
+  private readonly logger = new Logger(ProductService.name);
+
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
@@ -39,6 +42,7 @@ export class ProductService {
     const product = await this.productRepository.findOne({ where: { id } });
 
     if (!product) {
+      this.logger.error(`Product with id "${id}" not found`);
       throw new NotFoundException(`Product with id "${id}" not found`);
     }
 
@@ -75,11 +79,13 @@ export class ProductService {
     const product = await this.productRepository.findOne({ where: { id } });
 
     if (!product) {
+      this.logger.error(`Product with id "${id}" not found`);
       throw new NotFoundException(`Product with id "${id}" not found`);
     }
 
     // Check if user is the owner
     if (product.createdBy !== user.id) {
+      this.logger.error('You are not allowed to modify this product');
       throw new ForbiddenException(
         'You are not allowed to modify this product',
       );
@@ -102,11 +108,13 @@ export class ProductService {
     const product = await this.productRepository.findOne({ where: { id } });
 
     if (!product) {
+      this.logger.error(`Product with id "${id}" not found`);
       throw new NotFoundException(`Product with id "${id}" not found`);
     }
 
     // Check if user is the owner
     if (product.createdBy !== user.id) {
+      this.logger.error('You are not allowed to delete this product');
       throw new ForbiddenException(
         'You are not allowed to delete this product',
       );
@@ -127,12 +135,14 @@ export class ProductService {
     const userProductIds = products.map((product) => product.id);
 
     if (userProductIds.length === 0) {
+      this.logger.error('No products found that belong to you');
       throw new NotFoundException('No products found that belong to you');
     }
 
     const result = await this.productRepository.delete(userProductIds);
 
     if (result.affected === 0) {
+      this.logger.error('No products were deleted');
       throw new NotFoundException('No products were deleted');
     }
   }

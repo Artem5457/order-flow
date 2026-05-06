@@ -18,14 +18,14 @@ export class OrderItem {
   @Column({ type: 'uuid', nullable: false })
   orderId: string;
 
-  @ManyToOne(() => Order, { eager: true, onDelete: 'CASCADE' })
+  @ManyToOne(() => Order, (order) => order.items, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'orderId' })
   order: Order;
 
   @Column({ type: 'uuid', nullable: false })
   productId: string;
 
-  @ManyToOne(() => Product, { eager: true, onDelete: 'CASCADE' })
+  @ManyToOne(() => Product, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'productId' })
   product: Product;
 

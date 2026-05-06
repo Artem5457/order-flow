@@ -11,6 +11,7 @@ import { validationSchema } from './config/validation.schema';
 import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { ProductModule } from './product/product.module';
+import { OrderModule } from './order/order.module';
 import jwtConfig from './config/jwt.config';
 
 @Module({
@@ -37,6 +38,7 @@ import jwtConfig from './config/jwt.config';
     RedisModule.forRoot(),
     AuthModule,
     ProductModule,
+    OrderModule,
   ],
   controllers: [AppController],
   providers: [

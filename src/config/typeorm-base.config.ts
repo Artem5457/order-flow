@@ -32,9 +32,10 @@ export function getTypeOrmRootOptions(): DataSourceOptions {
     migrations: [migrationsGlob],
     synchronize: false,
     migrationsTransactionMode: 'each',
-    logging:
-      process.env.NODE_ENV === 'development'
-        ? ['query', 'error', 'warn']
-        : ['error'],
+    logging: ['error'],
   };
 }
+
+// process.env.NODE_ENV === 'development'
+//   ? ['query', 'error', 'warn']
+//   : ['error'],

@@ -2,6 +2,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -21,6 +22,7 @@ import { JwtPayload } from './strategies/jwt.strategy';
 @Injectable()
 export class AuthService {
   private static readonly PASSWORD_SALT_ROUNDS = 10;
+  private readonly logger = new Logger(AuthService.name);
 
   constructor(
     @InjectRepository(User)
@@ -37,6 +39,7 @@ export class AuthService {
     });
 
     if (existingUser) {
+      this.logger.error('User with this email already exists');
       throw new ConflictException('User with this email already exists');
     }
 
@@ -47,6 +50,7 @@ export class AuthService {
 
     const savedUser = await this.usersRepository.save(user);
 
+    this.logger.log(`User registered successfully - ID: ${savedUser.id}`);
     return this.issueTokens(savedUser);
   }
 
@@ -56,19 +60,23 @@ export class AuthService {
     });
 
     if (!user) {
+      this.logger.error('Invalid credentials');
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid = await compare(dto.password, user.password);
     if (!isPasswordValid) {
+      this.logger.error('Invalid credentials');
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    this.logger.log(`User logged in successfully - ID: ${user.id}`);
     return this.issueTokens(user);
   }
 
   async logout(userId: string): Promise<void> {
     await this.redisClient.del(this.getRefreshTokenStorageKey(userId));
+    this.logger.log(`User logged out successfully - ID: ${userId}`);
   }
 
   async refreshToken(refreshToken: string): Promise<AuthResponseDto> {
@@ -78,6 +86,7 @@ export class AuthService {
     });
 
     if (!user) {
+      this.logger.error('User not found');
       throw new UnauthorizedException('User not found');
     }
 
@@ -85,14 +94,17 @@ export class AuthService {
       this.getRefreshTokenStorageKey(user.id),
     );
     if (!storedTokenHash) {
+      this.logger.error('Refresh session expired');
       throw new UnauthorizedException('Refresh session expired');
     }
 
     const isRefreshTokenValid = await compare(refreshToken, storedTokenHash);
     if (!isRefreshTokenValid) {
+      this.logger.error('Invalid refresh token');
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    this.logger.log(`Refresh token refreshed successfully - ID: ${user.id}`);
     return this.issueTokens(user);
   }
 
@@ -121,6 +133,7 @@ export class AuthService {
       this.getRefreshTokenTtlSeconds(refreshToken),
     );
 
+    this.logger.log(`Tokens issued successfully - ID: ${user.id}`);
     return {
       accessToken,
       refreshToken,
@@ -133,6 +146,7 @@ export class AuthService {
         secret: this.configService.getOrThrow<string>('jwt.secret'),
       });
     } catch {
+      this.logger.error('Invalid refresh token');
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
